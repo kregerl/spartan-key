@@ -1,0 +1,39 @@
+:root {
+  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+  font-size: 10px;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-size-adjust: 100%;
+
+
+  --dark-black: #121212;
+  --medium-black: #1B1B1B;
+  --light-black: #2f2f2f;
+  --lightest-black: #353535;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+.high-emphasis {
+	opacity: 87%;
+}
+
+.medium-emphasis {
+	opacity: 60%;
+}
+
+.low-emphasis {
+	opacity: 38%;
+}
+
+h1:focus {
+	outline: none;
+}
