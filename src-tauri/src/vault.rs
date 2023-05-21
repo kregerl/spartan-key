@@ -32,11 +32,15 @@ struct VaultManager {
 }
 
 impl VaultManager {
+    pub fn get_vault_names(&self) -> Vec<String> {
+        self.vaults.keys().map(|key| key.clone()).collect()
+    }
+
     pub fn add_and_activate_vault(&mut self, vault_name: &str, vault: Vault) {
         self.add_vault(vault_name.into(), vault);
         self.set_active_vault(vault_name.into());
     }
-    
+
     pub fn add_vault(&mut self, vault_name: String, vault: Vault) {
         self.vaults.insert(vault_name, vault);
     }
@@ -45,23 +49,29 @@ impl VaultManager {
         self.active_vault_name = Some(vault_name);
     }
 
+    pub fn get_vault(&self, name: &str) -> Option<&Vault> {
+        self.vaults.get(name)
+    }
+
     pub fn get_active_vault_name(&self) -> Option<&str> {
         self.active_vault_name.as_deref()
     }
 
-    pub fn get_active_vault(&self) -> Option<&Vault> {
+    pub fn get_active_vault(&mut self) -> Option<&mut Vault> {
         let x = self.active_vault_name.as_deref()?;
-        self.vaults.get(x)
+        self.vaults.get_mut(x)
     }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct Vault {
+    // Header info
     salt: [u8; SALT_SIZE],
     master_password_nonce: [u8; NONCE_SIZE],
     recovery_key_nonce: [u8; NONCE_SIZE],
     key: Vec<u8>,
     recovery_key: Vec<u8>,
+    // Encrypted Data
     vault_entries: HashMap<String, VaultEntry>,
 }
 
@@ -119,7 +129,7 @@ pub fn create_new_vault(
     println!("master_password: {}", master_password);
 
     // Generate an obnoxious string for the encryption key.
-    let internal_master_key = generate_password(KEY_SIZE);
+    let internal_master_key = derive_encryption_key(&generate_password(KEY_SIZE), None).0;
 
     // Now derive an encryption key from the master password
     let (master_password_key, master_password_key_salt) =
@@ -127,7 +137,7 @@ pub fn create_new_vault(
 
     // And use the encryption key derived from the master_password to encrypt the internal_master_key
     let (mp_encrypted_internal_master_key_nonce, mp_encrypted_internal_master_key) =
-        encrypt_plaintext(&internal_master_key.as_bytes(), master_password_key).unwrap();
+        encrypt_plaintext(&internal_master_key, master_password_key).unwrap();
 
     // TODO: Write the recovery key to a file (maybe noeof?)
     // Derive a random encryption key, this is the recovery key
@@ -135,13 +145,15 @@ pub fn create_new_vault(
 
     // Encrypt the internal master key again, but this time using the randomly derived encryption key.
     let (rk_encrypted_internal_master_key_nonce, rk_encrypted_internal_master_key) =
-        encrypt_plaintext(&internal_master_key.as_bytes(), recovery_key).unwrap();
+        encrypt_plaintext(&internal_master_key, recovery_key).unwrap();
 
     // Get the vault manager
-    let vault_manager_state: tauri::State<VaultManagerState> = app_handle.try_state().expect("`VaultManager` should already be managed");
+    let vault_manager_state: tauri::State<VaultManagerState> = app_handle
+        .try_state()
+        .expect("`VaultManager` should already be managed");
     let mut vault_manager = vault_manager_state.0.lock().unwrap();
 
-    // Create a new vault, add it to the vault manager and activate it 
+    // Create a new vault, add it to the vault manager and activate it
     let vault = Vault::new(
         master_password_key_salt,
         mp_encrypted_internal_master_key_nonce,
@@ -155,6 +167,50 @@ pub fn create_new_vault(
     let config_state: tauri::State<ConfigState> = app_handle.state();
     config_state.add_vault(&vault_name, Path::new(&vault_path));
     println!("Done!");
+}
+
+#[tauri::command]
+pub fn add_entry(
+    url: String,
+    username: String,
+    password: String,
+    app_handle: tauri::AppHandle<tauri::Wry>,
+) {
+    let vault_manager_state: tauri::State<VaultManagerState> = app_handle
+        .try_state()
+        .expect("`VaultManager` should already be managed");
+    let mut vault_manager = vault_manager_state.0.lock().unwrap();
+
+    if let Some(vault) = vault_manager.get_active_vault() {
+        vault.add_vault_entry(
+            url.clone(),
+            VaultEntry {
+                username,
+                password,
+                url,
+            },
+        )
+    }
+}
+
+#[tauri::command]
+pub fn get_active_vault_entries(app_handle: tauri::AppHandle<tauri::Wry>) -> Vec<String> {
+    let vault_manager_state: tauri::State<VaultManagerState> = app_handle
+        .try_state()
+        .expect("`VaultManager` should already be managed");
+    let mut vault_manager = vault_manager_state.0.lock().unwrap();
+
+    if let Some(vault) = vault_manager.get_active_vault() {
+        return vault.vault_entries.keys().map(|key| key.clone()).collect();
+    }
+    Vec::new()
+}
+
+#[tauri::command]
+pub fn get_vaults(app_handle: tauri::AppHandle<tauri::Wry>) -> Vec<String> {
+    let config_state: tauri::State<ConfigState> = app_handle.state();
+    let config = config_state.state.lock().unwrap();
+    config.get_vault_names()
 }
 
 /// Generates a random password that satisfies the following password requirements:

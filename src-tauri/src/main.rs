@@ -5,7 +5,7 @@ use serde::ser::StdError;
 use std::{fs};
 use tauri::{Manager, App, Wry};
 
-use crate::{state::ConfigState, vault::{create_new_vault, VaultManagerState}};
+use crate::{state::ConfigState, vault::{create_new_vault, VaultManagerState, add_entry, get_active_vault_entries, get_vaults}};
 
 mod state;
 mod vault;
@@ -24,7 +24,7 @@ fn main() {
                 config_state.write().expect("Error writing config to file.");
             }
         })
-        .invoke_handler(tauri::generate_handler![create_new_vault])
+        .invoke_handler(tauri::generate_handler![create_new_vault, add_entry, get_active_vault_entries, get_vaults])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

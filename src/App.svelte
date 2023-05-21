@@ -2,15 +2,15 @@
   import { Router, Route } from "svelte-navigator";
   import SelectVault from "./lib/SelectVault.svelte";
   import NewVault from "./lib/NewVault.svelte";
+  import VaultPasswords from "./lib/VaultPasswords.svelte";
 </script>
 
 <Router>
   <main>
-    <Route path="/">
-      <SelectVault />
-    </Route>
-    <Route path="/new-vault">
-      <NewVault />
+    <Route path="/" component={SelectVault} />
+    <Route path="/new-vault" component={NewVault} />
+    <Route path="/passwords/:vault" let:params >
+      <VaultPasswords params={params}/>  
     </Route>
   </main>
 </Router>

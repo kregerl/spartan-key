@@ -24,6 +24,10 @@ impl Config {
     fn serialize(&self) -> Vec<u8> {
         bincode::serialize(&self).unwrap()
     }
+
+    pub fn get_vault_names(&self) -> Vec<String> {
+        self.vaults.keys().map(|key| key.clone()).collect()
+    }
 }
 
 /// Wrapper for [Config] allowing modification from seperate threads(or tauri commands) with a mutex

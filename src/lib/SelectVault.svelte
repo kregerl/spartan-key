@@ -1,25 +1,29 @@
 <script lang="ts">
+    import { invoke } from "@tauri-apps/api";
     import { navigate } from "svelte-navigator";
 
     function newVault() {
         navigate("/new-vault");
     }
+
+    async function getVaults(): Promise<string[]> {
+        return await invoke("get_vaults");
+    }
+
 </script>
 
 <div class="vault-container">
     <h1 class="high-emphasis">Select Vault</h1>
-    <div class="vault">
-        <img src="vault.svg" alt="Vault" />
-        <span>Vault 1 Name</span>
-    </div>
-    <div class="vault">
-        <img src="vault.svg" alt="Vault" />
-        <span>Vault 2 Name</span>
-    </div>
-    <div class="vault">
-        <img src="vault.svg" alt="Vault" />
-        <span>Vault 3 Name</span>
-    </div>
+    {#await getVaults()}
+        <h1>Loading</h1>
+    {:then vaults}
+        {#each vaults as vault}
+            <div class="vault">
+                <img src="vault.svg" alt="Vault" />
+                <span>{vault}</span>
+            </div>
+        {/each}
+    {/await}
     <button id="new-vault" on:click={newVault}>
         <img src="plus.svg" alt="Create New Vault" />
         <span>Create New Vault</span>
