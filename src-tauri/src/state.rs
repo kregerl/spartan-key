@@ -28,6 +28,14 @@ impl Config {
     pub fn get_vault_names(&self) -> Vec<String> {
         self.vaults.keys().map(|key| key.clone()).collect()
     }
+
+    pub fn get_vaults(&self) -> &HashMap<String, PathBuf> {
+        &self.vaults
+    }
+
+    pub fn get_path(&self, name: &str) -> Option<&PathBuf> {
+        self.vaults.get(name)
+    }
 }
 
 /// Wrapper for [Config] allowing modification from seperate threads(or tauri commands) with a mutex
@@ -51,6 +59,8 @@ impl ConfigState {
         } else {
             Config::default()
         };
+
+        println!("Loaded config: {:#?}", config);
 
         Self {
             path,

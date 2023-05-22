@@ -1,15 +1,19 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use bincode::config;
 use serde::ser::StdError;
-use std::{fs};
-use tauri::{Manager, App, Wry};
+use std::fs;
+use tauri::{App, Manager, Wry};
 
-use crate::{state::ConfigState, vault::{create_new_vault, VaultManagerState, add_entry, get_active_vault_entries, get_vaults}};
+use crate::{
+    state::ConfigState,
+    vault::{add_entry, create_new_vault, get_active_vault_entries, get_vaults, VaultManagerState, open_vault},
+};
 
+mod error;
 mod state;
 mod vault;
-mod error;
 
 fn main() {
     tauri::Builder::default()
@@ -20,11 +24,30 @@ fn main() {
                 let app_handle = window_event.window().app_handle();
                 println!("CloseRequested");
                 let config_state: tauri::State<ConfigState> = app_handle.state();
-                println!("Vaults: {:#?}", config_state.state.lock().unwrap());
+
                 config_state.write().expect("Error writing config to file.");
+
+                let config = config_state.state.lock().unwrap();
+                let vaults = config.get_vaults();
+                println!("Vaults: {:#?}", vaults);
+
+                let vault_manager_state: tauri::State<VaultManagerState> = app_handle
+                    .try_state()
+                    .expect("`VaultManager` should already be managed");
+                let vault_manager = vault_manager_state.0.lock().unwrap();
+                for (key, path) in vaults {
+                    let vault = vault_manager.get_vault(key).expect("Vault does not exist.");
+                    vault.write(path).unwrap();
+                }
             }
         })
-        .invoke_handler(tauri::generate_handler![create_new_vault, add_entry, get_active_vault_entries, get_vaults])
+        .invoke_handler(tauri::generate_handler![
+            create_new_vault,
+            add_entry,
+            get_active_vault_entries,
+            get_vaults,
+            open_vault
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -43,4 +66,3 @@ fn setup(app: &mut App<Wry>) -> Result<(), Box<(dyn StdError + 'static)>> {
     println!("After manage");
     Ok(())
 }
-

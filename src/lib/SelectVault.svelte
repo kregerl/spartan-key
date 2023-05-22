@@ -10,6 +10,11 @@
         return await invoke("get_vaults");
     }
 
+    async function openVault() {
+        await invoke("open_vault", {name: this.id});
+        console.log("vault:", this.id);
+    }
+
 </script>
 
 <div class="vault-container">
@@ -18,7 +23,7 @@
         <h1>Loading</h1>
     {:then vaults}
         {#each vaults as vault}
-            <div class="vault">
+            <div id={vault} class="vault" on:click={openVault}>
                 <img src="vault.svg" alt="Vault" />
                 <span>{vault}</span>
             </div>
