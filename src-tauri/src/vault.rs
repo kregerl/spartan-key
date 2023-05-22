@@ -111,7 +111,7 @@ impl Vault {
         }
     }
 
-    pub fn read(path: &Path, master_password: &str) -> Result<(), Box<ErrorKind>> {
+    pub fn read(path: &Path, master_password: &str) -> Result<Self, Box<ErrorKind>> {
         let mut reader: BufReader<File> = BufReader::new(File::open(path)?);
 
         let header: VaultHeader = bincode::deserialize_from(&mut reader)?;
@@ -125,17 +125,22 @@ impl Vault {
         println!("Ciphertext: {:#?}", ciphertext_bytes);
 
         let (derived_key, _) = derive_encryption_key(master_password, Some(header.salt));
-        let key = decrypt_ciphertext_of_size(
+        let internal_key = decrypt_ciphertext_of_size(
             &header.master_password_key,
             derived_key,
             header.master_password_nonce,
         )
         .unwrap();
 
-        let x = decrypt_ciphertext(&ciphertext_bytes, key, nonce).unwrap();
-        let map: HashMap<String, VaultEntry> = bincode::deserialize(&x).unwrap();
-        println!("Decrypt: {:#?}", map);
-        Ok(())
+        let decrypted_bytes = decrypt_ciphertext(&ciphertext_bytes, internal_key, nonce).unwrap();
+        let vault_entries: HashMap<String, VaultEntry> = bincode::deserialize(&decrypted_bytes).unwrap();
+        println!("Decrypt: {:#?}", vault_entries);
+
+        Ok(Self {
+            header,
+            internal_key,
+            vault_entries,
+        })
     }
 
     pub fn add_vault_entry(&mut self, entry_title: String, vault_entry: VaultEntry) {
@@ -225,11 +230,15 @@ pub fn create_new_vault(
         mp_encrypted_internal_master_key,
         rk_encrypted_internal_master_key,
     );
+    // Write the vault to the vault path
+    let path = Path::new(&vault_path);
+    vault.write(&path).unwrap();
+
     vault_manager.add_and_activate_vault(&vault_name, vault);
 
     // Add the vault mapping to the config
     let config_state: tauri::State<ConfigState> = app_handle.state();
-    config_state.add_vault(&vault_name, Path::new(&vault_path));
+    config_state.add_vault(&vault_name, path);
     println!("Done!");
 }
 
@@ -242,6 +251,7 @@ pub fn add_entry(
     password: String,
     app_handle: tauri::AppHandle<tauri::Wry>,
 ) {
+    // Get the vault manager state and add a vault entry to it
     let vault_manager_state: tauri::State<VaultManagerState> = app_handle
         .try_state()
         .expect("`VaultManager` should already be managed");
@@ -286,20 +296,20 @@ pub fn get_vaults(app_handle: tauri::AppHandle<tauri::Wry>) -> Vec<String> {
 #[tauri::command]
 /// **SHOULD ONLY BE CALLED FROM WEBVIEW** <br>
 /// Tries to read a vault called `name` from disk, decrypt it, and set it to the active vault.
-pub fn open_vault(name: String, app_handle: tauri::AppHandle<tauri::Wry>) {
+pub fn open_vault(name: String, password: String, app_handle: tauri::AppHandle<tauri::Wry>) {
     let vault_manager_state: tauri::State<VaultManagerState> = app_handle
         .try_state()
         .expect("`VaultManager` should already be managed");
-    let vault_manager = vault_manager_state.0.lock().unwrap();
+    let mut vault_manager = vault_manager_state.0.lock().unwrap();
 
     let config_state: tauri::State<ConfigState> = app_handle.state();
     let config = config_state.state.lock().unwrap();
     let path = config
         .get_path(&name)
         .expect(&format!("No vault entry for {}", name));
-    // TODO: Implement reading from disk
     println!("Opening: {}", name);
-    let vault = Vault::read(path.as_path(), "password").unwrap();
+    let vault = Vault::read(path.as_path(), &password).unwrap();
+    vault_manager.add_and_activate_vault(&name, vault);
 }
 
 /// Generates a random password that satisfies the following password requirements:
@@ -405,6 +415,10 @@ fn decrypt_ciphertext(
     Ok(cipher.decrypt(nonce, ciphertext)?)
 }
 
+/// Accepts the ciphertext, encryption key, and nonce and decrypts the ciphertext
+///
+/// Returns the decrypted ciphertext or an error.
+/// Error would indicate that either the key is wrong or the ciphertext was changed.
 fn decrypt_ciphertext_of_size<const N: usize>(
     ciphertext: &[u8],
     key_bytes: [u8; KEY_SIZE],

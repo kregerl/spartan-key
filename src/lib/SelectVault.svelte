@@ -2,6 +2,10 @@
     import { invoke } from "@tauri-apps/api";
     import { navigate } from "svelte-navigator";
 
+    let dialog: HTMLDialogElement;
+    let masterPassword: string;
+    let vault: string;
+
     function newVault() {
         navigate("/new-vault");
     }
@@ -10,12 +14,26 @@
         return await invoke("get_vaults");
     }
 
-    async function openVault() {
-        await invoke("open_vault", {name: this.id});
-        console.log("vault:", this.id);
+    async function submit(e: KeyboardEvent) {
+        if (e.key === "Enter") {
+            console.log("vault:", vault);
+            console.log("masterPassword:", masterPassword);
+            await invoke("open_vault", {name: vault, password: masterPassword});
+            navigate(`/passwords/${vault}`);
+        }
+    }
+
+    function openVault() {
+        console.log(dialog);
+        vault = this.id;
+        dialog.showModal();
     }
 
 </script>
+
+<dialog bind:this={dialog}>
+    <input type="password" placeholder="Master Password" bind:value={masterPassword} on:keydown={submit} />
+</dialog>
 
 <div class="vault-container">
     <h1 class="high-emphasis">Select Vault</h1>
@@ -23,7 +41,7 @@
         <h1>Loading</h1>
     {:then vaults}
         {#each vaults as vault}
-            <div id={vault} class="vault" on:click={openVault}>
+            <div id={vault} class="vault" on:click={openVault} on:keydown>
                 <img src="vault.svg" alt="Vault" />
                 <span>{vault}</span>
             </div>
@@ -86,5 +104,9 @@
         font-size: 1.6rem;
         font-weight: bold;
         margin: 0 0 0 8px;
+    }
+    dialog {
+        padding: 16px;
+        border: 2px solid red;
     }
 </style>
