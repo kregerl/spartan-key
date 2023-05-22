@@ -2,7 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read},
-    path::Path,
+    path::{Path, PathBuf},
     sync::Mutex,
 };
 
@@ -39,10 +39,6 @@ pub struct VaultManager {
 }
 
 impl VaultManager {
-    pub fn get_vault_names(&self) -> Vec<String> {
-        self.vaults.keys().map(|key| key.clone()).collect()
-    }
-
     pub fn add_and_activate_vault(&mut self, vault_name: &str, vault: Vault) {
         self.add_vault(vault_name.into(), vault);
         self.set_active_vault(vault_name.into());
@@ -68,6 +64,10 @@ impl VaultManager {
         let x = self.active_vault_name.as_deref()?;
         self.vaults.get_mut(x)
     }
+
+    pub fn get_vaults(&self) -> &HashMap<String, Vault> {
+        &self.vaults
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -85,12 +85,14 @@ pub struct Vault {
     header: VaultHeader,
     // Do not serialize
     internal_key: [u8; KEY_SIZE],
+    path: PathBuf,
     // Encrypted Data
     vault_entries: HashMap<String, VaultEntry>,
 }
 
 impl Vault {
     pub fn new(
+        path: &Path,
         salt: [u8; SALT_SIZE],
         master_password_nonce: [u8; NONCE_SIZE],
         recovery_key_nonce: [u8; NONCE_SIZE],
@@ -106,6 +108,7 @@ impl Vault {
                 master_password_key,
                 recovery_key,
             },
+            path: path.into(),
             internal_key,
             vault_entries: HashMap::default(),
         }
@@ -138,16 +141,17 @@ impl Vault {
 
         Ok(Self {
             header,
+            path: path.into(),
             internal_key,
             vault_entries,
         })
     }
 
-    pub fn add_vault_entry(&mut self, entry_title: String, vault_entry: VaultEntry) {
+    fn add_vault_entry(&mut self, entry_title: String, vault_entry: VaultEntry) {
         self.vault_entries.insert(entry_title, vault_entry);
     }
 
-    pub fn write(&self, path: &Path) -> Result<(), Box<ErrorKind>> {
+    pub fn write(&self) -> Result<(), Box<ErrorKind>> {
         let mut bytes: Vec<u8> = Vec::new();
 
         bytes.extend(bincode::serialize(&self.header)?);
@@ -156,14 +160,14 @@ impl Vault {
         let (nonce, ciphertext) = encrypt_plaintext(&entries_bytes, self.internal_key).unwrap();
         bytes.extend(nonce);
         bytes.extend(ciphertext);
-        fs::write(path, bytes)?;
+        fs::write(&self.path, bytes)?;
         Ok(())
     }
 }
 
 #[test]
 fn test_read() {
-    let vault = Vault::read(Path::new("/home/loucas/.config/com.spartankey/vault"), "password").unwrap();
+    let _ = Vault::read(Path::new("/home/loucas/.config/com.spartankey/vault"), "password").unwrap();
 }
 
 #[derive(Serialize, Deserialize, Debug, Default)]
@@ -171,16 +175,6 @@ struct VaultEntry {
     username: String,
     password: String,
     url: String,
-}
-
-impl VaultEntry {
-    pub fn new(username: String, password: String, url: String) -> Self {
-        Self {
-            username,
-            password,
-            url,
-        }
-    }
 }
 
 #[tauri::command]
@@ -221,8 +215,10 @@ pub fn create_new_vault(
         .expect("`VaultManager` should already be managed");
     let mut vault_manager = vault_manager_state.0.lock().unwrap();
 
+    let path = Path::new(&vault_path);
     // Create a new vault, add it to the vault manager and activate it
     let vault = Vault::new(
+        path,
         master_password_key_salt,
         mp_encrypted_internal_master_key_nonce,
         rk_encrypted_internal_master_key_nonce,
@@ -231,8 +227,7 @@ pub fn create_new_vault(
         rk_encrypted_internal_master_key,
     );
     // Write the vault to the vault path
-    let path = Path::new(&vault_path);
-    vault.write(&path).unwrap();
+    vault.write().unwrap();
 
     vault_manager.add_and_activate_vault(&vault_name, vault);
 
@@ -265,7 +260,8 @@ pub fn add_entry(
                 password,
                 url,
             },
-        )
+        );
+        vault.write().unwrap();
     }
 }
 
@@ -304,6 +300,8 @@ pub fn open_vault(name: String, password: String, app_handle: tauri::AppHandle<t
 
     let config_state: tauri::State<ConfigState> = app_handle.state();
     let config = config_state.state.lock().unwrap();
+    // TODO: First check if the vault manager already has the vault and retrieve it from there
+    // TODO: Otherwise we'll read the vault from disk.
     let path = config
         .get_path(&name)
         .expect(&format!("No vault entry for {}", name));

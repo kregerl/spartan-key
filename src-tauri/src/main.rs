@@ -1,7 +1,6 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use bincode::config;
 use serde::ser::StdError;
 use std::fs;
 use tauri::{App, Manager, Wry};
@@ -35,10 +34,13 @@ fn main() {
                     .try_state()
                     .expect("`VaultManager` should already be managed");
                 let vault_manager = vault_manager_state.0.lock().unwrap();
-                for (key, path) in vaults {
-                    let vault = vault_manager.get_vault(key).expect("Vault does not exist.");
-                    vault.write(path).unwrap();
+                for (_, vault) in vault_manager.get_vaults() {
+                    vault.write().unwrap();
                 }
+                // for (key, path) in vaults {
+                    // let vault = vault_manager.get_vault(key).expect("Vault does not exist.");
+                    // vault.write().unwrap();
+                // }
             }
         })
         .invoke_handler(tauri::generate_handler![
