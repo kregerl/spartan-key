@@ -13,6 +13,7 @@ use crate::{
 mod error;
 mod state;
 mod vault;
+mod securesting;
 
 fn main() {
     tauri::Builder::default()
