@@ -1,4 +1,4 @@
-<script lang="ts">
+<!-- <script lang="ts">
   import { Router, Route } from "svelte-navigator";
   import SelectVault from "./lib/SelectVault.svelte";
   import NewVault from "./lib/NewVault.svelte";
@@ -24,4 +24,34 @@
     height: 100%;
     background-color: var(--dark-black);
   }
-</style>
+</style> -->
+
+<script lang="ts">
+  import { Router, Route, navigate } from "svelte-navigator";
+  import Login from "./Login.svelte";
+  import { onMount } from "svelte";
+  import { invoke } from "@tauri-apps/api/tauri";
+  import CreateVault from "./CreateVault.svelte";
+  import Vault from "./Vault.svelte";
+
+  onMount(async () => {
+    let vaults = await invoke<string[]>("get_vaults");
+    if (vaults.length >= 1) {
+      navigate(`/Login/${vaults.at(0)}`);
+    }
+  });
+</script>
+
+<Router>
+  <Route path="/">
+    <CreateVault />
+  </Route>
+
+  <Route path="/Login/:vault" let:params>
+    <Login {params} />
+  </Route>
+
+  <Route path="/Entry/:vault" let:params>
+    <Vault {params}/>
+  </Route>
+</Router>

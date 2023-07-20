@@ -13,7 +13,6 @@ use crate::{
 mod error;
 mod state;
 mod vault;
-mod securesting;
 
 fn main() {
     tauri::Builder::default()
@@ -66,6 +65,5 @@ fn setup(app: &mut App<Wry>) -> Result<(), Box<(dyn StdError + 'static)>> {
     app.manage(ConfigState::new(&app_dir));
     app.manage(VaultManagerState::new());
 
-    println!("After manage");
     Ok(())
 }

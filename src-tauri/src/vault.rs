@@ -72,6 +72,7 @@ impl VaultManager {
 
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct VaultHeader {
+    signature: [u8; 1],
     salt: [u8; SALT_SIZE],
     master_password_nonce: [u8; NONCE_SIZE],
     recovery_key_nonce: [u8; NONCE_SIZE],
@@ -102,6 +103,7 @@ impl Vault {
     ) -> Self {
         Self {
             header: VaultHeader {
+                signature: [0xED],
                 salt,
                 master_password_nonce,
                 recovery_key_nonce,
@@ -170,8 +172,8 @@ fn test_read() {
     let _ = Vault::read(Path::new("/home/loucas/.config/com.spartankey/vault"), "password").unwrap();
 }
 
-#[derive(Serialize, Deserialize, Debug, Default)]
-struct VaultEntry {
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
+pub struct VaultEntry {
     username: String,
     password: String,
     url: String,
@@ -216,6 +218,8 @@ pub fn create_new_vault(
     let mut vault_manager = vault_manager_state.0.lock().unwrap();
 
     let path = Path::new(&vault_path);
+    println!("Creating vault at path: {}", vault_path);
+    
     // Create a new vault, add it to the vault manager and activate it
     let vault = Vault::new(
         path,
@@ -234,6 +238,7 @@ pub fn create_new_vault(
     // Add the vault mapping to the config
     let config_state: tauri::State<ConfigState> = app_handle.state();
     config_state.add_vault(&vault_name, path);
+    config_state.write().expect("Error writing config to file.");
     println!("Done!");
 }
 
@@ -268,14 +273,14 @@ pub fn add_entry(
 #[tauri::command]
 /// **SHOULD ONLY BE CALLED FROM WEBVIEW** <br>
 /// Returns all the entries in the currently active vault
-pub fn get_active_vault_entries(app_handle: tauri::AppHandle<tauri::Wry>) -> Vec<String> {
+pub fn get_active_vault_entries(app_handle: tauri::AppHandle<tauri::Wry>) -> Vec<VaultEntry> {
     let vault_manager_state: tauri::State<VaultManagerState> = app_handle
         .try_state()
         .expect("`VaultManager` should already be managed");
     let mut vault_manager = vault_manager_state.0.lock().unwrap();
 
     if let Some(vault) = vault_manager.get_active_vault() {
-        return vault.vault_entries.keys().map(|key| key.clone()).collect();
+        return vault.vault_entries.values().map(|entry| entry.clone()).collect();
     }
     Vec::new()
 }
@@ -377,7 +382,7 @@ fn derive_encryption_key(
     )
 }
 
-/// Takes the bytes to encrypt and the encryption key and creates the ciphertext;
+/// Takes the bytes to encrypt and the encryption key and creates the ciphertext
 /// A 96-bit nonce is randomly generated and used during the AES256-GCM process.
 ///
 /// The generated ciphertext will have a 16 byte authentication tag appended to it.
