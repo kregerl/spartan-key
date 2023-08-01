@@ -36,6 +36,10 @@
     entries = [...entries, {url: url, username: username, password: password}];
   }
 
+  function copyPassword(i) {
+    navigator.clipboard.writeText(entries[i].password);
+  }
+
   onMount(async () => {
     entries = await invoke("get_active_vault_entries");
     console.log(entries);
@@ -48,8 +52,8 @@
       <h1 id="vault-entry-header">Vault Entries</h1>
     </div>
     <div class="list">
-      {#each entries as entry}
-        <div class="entry-wrapper">
+      {#each entries as entry, i}
+        <div class="entry-wrapper" on:click={() => copyPassword(i)} on:keydown>
           <span>Url: {entry.url}</span>
           <span>Username: {entry.username}</span>
           {#if showPassword}
@@ -107,6 +111,11 @@
 
   .entry-wrapper  > span {
     text-align: left;
+  }
+
+  .entry-wrapper:hover {
+    background-color: #666666;
+    cursor: pointer;
   }
 
   .container {
